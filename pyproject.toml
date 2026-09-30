@@ -1,0 +1,32 @@
+[project]
+name = "reachy-motion-generator-api"
+version = "0.1.0"
+description = "Client for the Reachy Mini motion generator: a text prompt in, a reachy-animation Clip out"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["reachy-animation"]
+
+[project.urls]
+Repository = "https://github.com/pham-tuan-binh/reachy-motion-generator-api"
+
+[tool.uv.sources]
+reachy-animation = { git = "https://github.com/pham-tuan-binh/reachy-animation" }
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.ruff]
+line-length = 119
+extend-exclude = ["*.md"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
