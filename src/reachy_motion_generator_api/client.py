@@ -23,6 +23,23 @@ class MotionGeneratorError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class Generation:
+    """Motions and what the planner decided for them (``MotionGenerator.generate``)."""
+
+    prompt: str
+    effort: str
+    """The planner that wrote it: ``low``, ``medium`` or ``high``."""
+    idea: str
+    """One sentence describing the motion."""
+    recipe: str
+    """The motion script the clips were generated from."""
+    clips: list[Clip]
+    """One ``Clip`` per variation, ready for ``Animator.play``."""
+    timing_ms: dict[str, int] = field(default_factory=dict)
+    """Server time per stage: ``planner``, ``generator``, ``reachability``, ``total``."""
+
+
+@dataclass(frozen=True)
 class Plan:
     """What the planner decided, before any motion is generated (``MotionGenerator.sparse``)."""
 
@@ -50,21 +67,50 @@ class MotionGenerator:
         self.effort = effort
         self.timeout_s = timeout_s
 
-    def dense(self, prompt: str, effort: Effort | None = None, seed: int | None = None) -> Clip:
+    def dense(self, prompt: str, effort: Effort | None = None, seed: int | None = None, **options: Any) -> Clip:
         """Generate one motion for ``prompt``, ready for ``Animator.play``.
 
         ``seed=None`` picks a new one each call, so the same prompt varies; pass a seed to repeat a result.
+        ``options``: ``retries`` / ``batched_retries`` (see ``generate``).
         """
-        return self.dense_many(prompt, 1, effort, seed)[0]
+        return self.generate(prompt, 1, effort, seed, **options).clips[0]
 
-    def dense_many(self, prompt: str, n: int, effort: Effort | None = None, seed: int | None = None) -> list[Clip]:
+    def dense_many(
+        self, prompt: str, n: int, effort: Effort | None = None, seed: int | None = None, **options: Any
+    ) -> list[Clip]:
         """Generate ``n`` variations of one motion (same plan, different amplitude, tempo and detail)."""
-        r = self._post("/generate-dense", prompt, n, effort, seed)
-        return [Clip.load({**move, "description": prompt}) for move in r["moves"]]
+        return self.generate(prompt, n, effort, seed, **options).clips
 
-    def sparse(self, prompt: str, n: int = 1, effort: Effort | None = None, seed: int | None = None) -> Plan:
+    def generate(
+        self,
+        prompt: str,
+        n: int = 1,
+        effort: Effort | None = None,
+        seed: int | None = None,
+        retries: int | None = None,
+        batched_retries: bool | None = None,
+    ) -> Generation:
+        """Generate ``n`` motions and return them with the planner's idea, recipe and timing.
+
+        ``retries`` (server default 2): extra attempts when the planner's first answer is invalid.
+        ``batched_retries`` (default off): try them together with the first answer, so a bad first answer costs no
+        extra round, but every request is slower.
+        """
+        r = self._post("/generate-dense", prompt, n, effort, seed, retries, batched_retries)
+        clips = [Clip.load({**move, "description": prompt}) for move in r["moves"]]
+        return Generation(prompt, r.get("effort", ""), r.get("idea", ""), r["recipe"], clips, r.get("timing_ms", {}))
+
+    def sparse(
+        self,
+        prompt: str,
+        n: int = 1,
+        effort: Effort | None = None,
+        seed: int | None = None,
+        retries: int | None = None,
+        batched_retries: bool | None = None,
+    ) -> Plan:
         """Only plan the motion: the recipe and its keyframes, without running the motion model (faster)."""
-        r = self._post("/generate-sparse", prompt, n, effort, seed)
+        r = self._post("/generate-sparse", prompt, n, effort, seed, retries, batched_retries)
         return Plan(
             prompt=prompt,
             idea=r.get("idea", ""),
@@ -74,10 +120,23 @@ class MotionGenerator:
             timing_ms=r.get("timing_ms", {}),
         )
 
-    def _post(self, path: str, prompt: str, n: int, effort: Effort | None, seed: int | None) -> dict[str, Any]:
+    def _post(
+        self,
+        path: str,
+        prompt: str,
+        n: int,
+        effort: Effort | None,
+        seed: int | None,
+        retries: int | None = None,
+        batched_retries: bool | None = None,
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {"prompt": prompt, "n": n, "seed": random.randrange(2**31) if seed is None else seed}
         if effort or self.effort:
             body["effort"] = effort or self.effort
+        if retries is not None:
+            body["retries"] = retries
+        if batched_retries is not None:
+            body["batched_retries"] = batched_retries
         request = urllib.request.Request(
             self.url + path, data=json.dumps(body).encode(), headers={"content-type": "application/json"}
         )

@@ -34,6 +34,7 @@ animator.play(partial(gen.dense, "startled. A door slams behind you."))
 |---|---|
 | `gen.dense(prompt)` | one `Clip`, ready for `Animator.play` |
 | `gen.dense_many(prompt, n)` | `n` variations of the same motion |
+| `gen.generate(prompt, n)` | a `Generation`: the `clips` plus the planner's `idea`, `recipe` and `timing_ms` |
 | `gen.sparse(prompt)` | a `Plan`: the motion's `idea`, its `recipe` and `keyframes` (faster: no motion is generated) |
 
 Every call takes `effort` and `seed`:
@@ -45,6 +46,8 @@ Every call takes `effort` and `seed`:
 | `effort="high"` | best motion (~0.8 s), the server's default |
 | `seed=None` | a new variation each call (default) |
 | `seed=7` | the same result every time |
+| `retries=2` | extra attempts when the planner's first answer is invalid (the server's default) |
+| `batched_retries=True` | try them together with the first answer: a bad first answer costs no extra round, every request is slower (off by default) |
 
 Set the default once with `MotionGenerator(url, effort="low")`. The URL can also come from the `REACHY_MOTION_API`
 environment variable. Errors raise `MotionGeneratorError` with the server's message.
@@ -64,7 +67,10 @@ the server to another port: `ssh -N -L 8001:localhost:8000 <gpu-machine>`.
 
 ## Example
 
-[`examples/robot.py`](examples/robot.py): type prompts in the terminal and the robot performs them.
+[`examples/robot.py`](examples/robot.py): type prompts in the terminal and the robot performs them, breathing while
+each one is generated. It uses every call: `generate` (prints the idea, recipe and timing), `dense_many` (`/many 3`
+queues three variations), `sparse` (`/plan` shows the plan without moving), and switches `effort` (`/low`, `/medium`,
+`/high`). Enter replays the last motion, `/again` makes a new variation, `/stop` returns to idle.
 
 ```bash
 uv run --with reachy-mini examples/robot.py --api http://localhost:8001

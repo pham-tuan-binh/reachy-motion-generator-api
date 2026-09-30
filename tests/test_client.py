@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from reachy_animation import Clip
 
-from reachy_motion_generator_api import MotionGenerator, MotionGeneratorError, Plan
+from reachy_motion_generator_api import Generation, MotionGenerator, MotionGeneratorError, Plan
 
 REQUESTS: list[dict[str, Any]] = []
 
@@ -115,3 +115,11 @@ def test_errors_are_readable(server: str) -> None:
 def test_url_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("REACHY_MOTION_API", "http://example:1234/")
     assert MotionGenerator().url == "http://example:1234"
+
+
+def test_generate_returns_metadata_and_passes_retry_options(server: str) -> None:
+    g = MotionGenerator(server).generate("proud.", n=2, effort="medium", retries=0, batched_retries=True)
+    assert isinstance(g, Generation) and len(g.clips) == 2 and g.recipe == "go 1 e=20" and g.effort == "medium"
+    assert REQUESTS[-1]["retries"] == 0 and REQUESTS[-1]["batched_retries"] is True
+    MotionGenerator(server).dense("proud.")
+    assert "retries" not in REQUESTS[-1] and "batched_retries" not in REQUESTS[-1]  # server defaults
