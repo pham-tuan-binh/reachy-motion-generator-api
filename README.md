@@ -53,6 +53,8 @@ Set the default once with `MotionGenerator(url, effort="low")`. The URL can also
 environment variable. Errors raise `MotionGeneratorError` with the server's message.
 
 Prompts work best as a word plus one sentence of context: `"proud. You finally solved the puzzle."`
+See [docs/PROMPTING.md](docs/PROMPTING.md) for what the planner responds to (intensity, directions, durations, stories)
+and which `effort` to pick, with measurements.
 
 ## The server
 
